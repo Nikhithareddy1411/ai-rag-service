@@ -24,6 +24,23 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
 
 
+class RAGRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    top_k: int = Field(default=5, ge=1, le=10)
+
+
+class Citation(BaseModel):
+    source_id: str
+    filename: str
+    chunk_index: int
+    score: float
+
+
+class RAGResponse(BaseModel):
+    answer: str
+    citations: list[Citation]
+
+
 class TokenRequest(BaseModel):
     username: str = Field(min_length=1, max_length=100)
     role: str = Field(default="user", pattern="^(user|admin)$")
