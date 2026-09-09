@@ -1,16 +1,11 @@
-from app.main import app
+from app.main import app, repository
 from app.repositories import InMemoryDocumentRepository, StoredChunk
-from app.store import get_repository
 
 
 def test_rag_query_returns_grounded_answer_and_citations(client, token, monkeypatch):
     repo = InMemoryDocumentRepository()
-    repo.add_document(
-        "doc-1",
-        "policy.md",
-        [StoredChunk("doc-1", "policy.md", 0, "Retention is seven years.", [1.0] * 384)],
-    )
-    app.dependency_overrides[get_repository] = lambda db: repo
+    repo.add_document("doc-1", "policy.md", [StoredChunk("doc-1", "policy.md", 0, "Retention is seven years.", [1.0] * 384)])
+    app.dependency_overrides[repository] = lambda: repo
 
     class FakeLLM:
         def generate(self, prompt):
@@ -19,12 +14,10 @@ def test_rag_query_returns_grounded_answer_and_citations(client, token, monkeypa
             return "Records are retained for seven years. [Source 1]"
 
     monkeypatch.setattr("app.main.get_llm", lambda: FakeLLM())
-    response = client.post(
-        "/api/v1/rag/query",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"question": "How long are records retained?", "top_k": 1},
-    )
-    app.dependency_overrides.pop(get_repository, None)
+    try:
+        response = client.post("/api/v1/rag/query", headers={"Authorization": f"Bearer {token}"}, json={"question": "How long are records retained?", "top_k": 1})
+    finally:
+        app.dependency_overrides.pop(repository, None)
 
     assert response.status_code == 200
     body = response.json()
