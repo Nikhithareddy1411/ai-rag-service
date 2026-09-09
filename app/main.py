@@ -1,3 +1,4 @@
+from re import findall
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
@@ -18,6 +19,17 @@ app = FastAPI(title=settings.app_name, version="0.3.0")
 
 def repository(db: Session = Depends(get_db)) -> DocumentRepository:
     return get_repository(db)
+
+
+def parse_source_markers(answer: str, source_count: int) -> list[int]:
+    markers = [int(value) for value in findall(r"\[Source\s+(\d+)\]", answer)]
+    invalid = sorted({marker for marker in markers if marker < 1 or marker > source_count})
+    if invalid:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Generated answer contains unsupported source markers: {invalid}",
+        )
+    return list(dict.fromkeys(markers))
 
 
 @app.get("/health")
@@ -65,5 +77,9 @@ def rag_query(request: RAGRequest, _: dict = Depends(get_current_user), repo: Do
         return RAGResponse(answer="I don't have enough information in the provided sources.", citations=[])
     prompt = build_grounded_prompt(request.question, [(chunk.filename, chunk.text, chunk.chunk_index) for chunk, _ in matches])
     answer = get_llm().generate(prompt)
-    citations = [Citation(source_id=f"Source {index}", filename=chunk.filename, chunk_index=chunk.chunk_index, score=round(score, 6)) for index, (chunk, score) in enumerate(matches, start=1)]
+    cited_source_indexes = parse_source_markers(answer, len(matches))
+    citations = [
+        Citation(source_id=f"Source {index}", filename=matches[index - 1][0].filename, chunk_index=matches[index - 1][0].chunk_index, score=round(matches[index - 1][1], 6))
+        for index in cited_source_indexes
+    ]
     return RAGResponse(answer=answer, citations=citations)
