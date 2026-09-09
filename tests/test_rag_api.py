@@ -1,4 +1,4 @@
-from app.main import app, repository
+from app.main import app, parse_source_markers, repository
 from app.repositories import InMemoryDocumentRepository, StoredChunk
 
 
@@ -174,3 +174,75 @@ def test_rag_query_does_not_return_unsupported_citations(client, token, monkeypa
     citations = response.json()["citations"]
     assert [citation["source_id"] for citation in citations] == ["Source 1"]
     assert all(citation["source_id"] != "Source 2" for citation in citations)
+
+
+def test_parse_source_markers_deduplicates_duplicate_markers():
+    assert parse_source_markers("Answer [Source 1] and again [Source 1].", 2) == [1]
+
+
+def test_rag_query_deduplicates_repeated_citations(client, token, monkeypatch):
+    repo = InMemoryDocumentRepository()
+    repo.add_document(
+        "doc-1",
+        "policy.md",
+        [StoredChunk("doc-1", "policy.md", 0, "Retention is seven years.", [1.0] * 384)],
+    )
+    repo.add_document(
+        "doc-2",
+        "access.md",
+        [StoredChunk("doc-2", "access.md", 0, "Access reviews occur quarterly.", [0.9] * 384)],
+    )
+    app.dependency_overrides[repository] = lambda: repo
+
+    class FakeLLM:
+        def generate(self, prompt):
+            return "Retention is seven years [Source 1]. Access reviews are quarterly [Source 2]. The retention period is seven years [Source 1]."
+
+    monkeypatch.setattr("app.main.get_llm", lambda: FakeLLM())
+    try:
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"question": "Summarize both policies.", "top_k": 2},
+        )
+    finally:
+        app.dependency_overrides.pop(repository, None)
+
+    assert response.status_code == 200
+    assert [citation["source_id"] for citation in response.json()["citations"]] == [
+        "Source 1",
+        "Source 2",
+    ]
+
+
+def test_parse_source_markers_ignores_malformed_markers():
+    answer = "This has [Source], [Source X], and [Sources 1], but no valid marker."
+    assert parse_source_markers(answer, 2) == []
+
+
+def test_rag_query_with_no_source_markers_returns_no_citations(client, token, monkeypatch):
+    repo = InMemoryDocumentRepository()
+    repo.add_document(
+        "doc-1",
+        "policy.md",
+        [StoredChunk("doc-1", "policy.md", 0, "Retention is seven years.", [1.0] * 384)],
+    )
+    app.dependency_overrides[repository] = lambda: repo
+
+    class FakeLLM:
+        def generate(self, prompt):
+            return "Records are retained for seven years."
+
+    monkeypatch.setattr("app.main.get_llm", lambda: FakeLLM())
+    try:
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"question": "How long are records retained?", "top_k": 1},
+        )
+    finally:
+        app.dependency_overrides.pop(repository, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Records are retained for seven years."
+    assert response.json()["citations"] == []
