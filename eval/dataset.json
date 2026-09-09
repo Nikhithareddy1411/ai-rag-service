@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "id": "retention-policy",
+      "question": "How long are compliance records retained?",
+      "documents": [
+        {"filename": "compliance.md", "chunk_index": 0, "text": "Compliance records are retained for seven years before eligible disposition."},
+        {"filename": "access.md", "chunk_index": 0, "text": "Access reviews are completed quarterly by system owners."},
+        {"filename": "incident.md", "chunk_index": 0, "text": "Security incidents must be reported within 24 hours."}
+      ],
+      "expected_source_ids": ["Source 1"],
+      "expected_answer_facts": ["seven years"]
+    },
+    {
+      "id": "access-review",
+      "question": "How often are access reviews completed?",
+      "documents": [
+        {"filename": "compliance.md", "chunk_index": 0, "text": "Compliance records are retained for seven years before eligible disposition."},
+        {"filename": "access.md", "chunk_index": 0, "text": "Access reviews are completed quarterly by system owners."},
+        {"filename": "incident.md", "chunk_index": 0, "text": "Security incidents must be reported within 24 hours."}
+      ],
+      "expected_source_ids": ["Source 1"],
+      "expected_answer_facts": ["quarterly"]
+    }
+  ]
+}
