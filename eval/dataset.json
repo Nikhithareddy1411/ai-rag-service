@@ -8,6 +8,7 @@
         {"filename": "access.md", "chunk_index": 0, "text": "Access reviews are completed quarterly by system owners."},
         {"filename": "incident.md", "chunk_index": 0, "text": "Security incidents must be reported within 24 hours."}
       ],
+      "expected_filenames": ["compliance.md"],
       "expected_source_ids": ["Source 1"],
       "expected_answer_facts": ["seven years"]
     },
@@ -19,6 +20,7 @@
         {"filename": "access.md", "chunk_index": 0, "text": "Access reviews are completed quarterly by system owners."},
         {"filename": "incident.md", "chunk_index": 0, "text": "Security incidents must be reported within 24 hours."}
       ],
+      "expected_filenames": ["access.md"],
       "expected_source_ids": ["Source 1"],
       "expected_answer_facts": ["quarterly"]
     }
