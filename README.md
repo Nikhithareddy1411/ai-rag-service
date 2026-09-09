@@ -40,13 +40,16 @@ EMBEDDING_DIMENSION=384
 
 ## Local Evaluation Suite
 
-The `eval/` directory contains a deterministic, offline regression suite with fixed documents and expected answers. It measures three signals:
+The `eval/` directory contains a deterministic, offline regression suite with fixed documents and expected answers. It measures answer and retrieval quality:
 
 - **Retrieval relevance** — whether the expected source text was retrieved.
+- **Recall@k** — fraction of known relevant sources present in the first `k` results.
+- **MRR (Mean Reciprocal Rank)** — reciprocal rank of the first relevant result.
+- **nDCG@k** — ranking quality using fixed graded relevance labels.
 - **Citation coverage** — whether expected `[Source N]` markers appear in the answer.
 - **Grounded answer quality** — whether expected factual phrases are present in the answer.
 
-The evaluator intentionally does not load the production embedding model or LLM, so it can run locally and in CI without downloading model weights.
+The evaluator intentionally does not load the production embedding model or LLM, so it can run locally and in CI without downloading model weights. The fixed dataset uses deterministic lexical fixture ranking to make metric regression tests reproducible.
 
 ```bash
 python -m eval.run_evaluation
@@ -104,7 +107,6 @@ ai-rag-service/
 │   └── test_repository.py
 ├── .env.example
 ├── alembic.ini
-├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -147,7 +149,7 @@ pytest -q
 python -m eval.run_evaluation
 ```
 
-Generation tests use a fake generator and therefore do not download LLM weights. Embedding tests avoid model downloads. The PostgreSQL integration test runs when `TEST_DATABASE_URL` is set.
+Generation tests use a fake generator and therefore do not download LLM weights. Embedding tests avoid model downloads. The PostgreSQL integration test runs when `TEST_DATABASE_URL` is set. Retrieval metric tests cover Recall@k, MRR, and nDCG deterministically.
 
 ## Technology
 
