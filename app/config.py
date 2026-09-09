@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     chunk_overlap: int = 50
     top_k: int = 5
     database_url: str = "postgresql+psycopg://rag:rag@localhost:5432/ragdb"
+    llm_model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    llm_device: int = -1
+    llm_max_new_tokens: int = 256
+    llm_temperature: float = 0.2
+    llm_do_sample: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
