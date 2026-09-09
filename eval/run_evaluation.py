@@ -4,48 +4,35 @@ import json
 from pathlib import Path
 
 from app.generation import build_grounded_prompt
-from app.repositories import InMemoryDocumentRepository, StoredChunk
 from eval.metrics import EvaluationResult, citation_coverage, grounded_answer_quality, retrieval_relevance
 
 DATASET = Path(__file__).with_name("dataset.json")
 
 
 def run_case(case: dict) -> EvaluationResult:
-    repo = InMemoryDocumentRepository()
-    chunks = [
-        StoredChunk(
-            document_id=f"doc-{index}",
-            filename=item["filename"],
-            chunk_index=item["chunk_index"],
-            text=item["text"],
-            vector=[0.0] * 384,
-        )
-        for index, item in enumerate(case["documents"])
-    ]
-    repo.add_document("eval", "eval", chunks)
+    chunks = case["documents"]
 
-    # Use a deterministic lexical scorer for evaluation fixtures so the suite is
-    # stable and does not download transformer weights.
+    # Keep evaluation deterministic and offline: rank fixed fixtures by lexical
+    # overlap instead of loading the production embedding model.
     query_terms = set(case["question"].lower().split())
     ranked = sorted(
         chunks,
-        key=lambda chunk: len(query_terms & set(chunk.text.lower().split())),
+        key=lambda chunk: len(query_terms & set(chunk["text"].lower().split())),
         reverse=True,
     )[:1]
-    retrieved_texts = [chunk.text for chunk in ranked]
+    retrieved_texts = [chunk["text"] for chunk in ranked]
     expected_texts = [
-        item["text"] for item in case["documents"]
-        if item["filename"] == case["documents"][0]["filename"]
+        item["text"] for item in chunks if item["filename"] in case["expected_filenames"]
     ]
 
     relevance = retrieval_relevance(retrieved_texts, expected_texts)
     prompt = build_grounded_prompt(
         case["question"],
-        [(chunk.filename, chunk.text, chunk.chunk_index) for chunk in ranked],
+        [(chunk["filename"], chunk["text"], chunk["chunk_index"]) for chunk in ranked],
     )
 
-    # Fixture answer represents the expected grounded behavior without requiring
-    # an external or locally downloaded LLM during evaluation.
+    # A deterministic expected-answer fixture lets CI validate grounding logic
+    # without downloading or executing an LLM.
     answer = f"{retrieved_texts[0]} [Source 1]"
     coverage = citation_coverage(answer, case["expected_source_ids"])
     quality = grounded_answer_quality(answer, case["expected_answer_facts"])
@@ -56,8 +43,9 @@ def run_case(case: dict) -> EvaluationResult:
 def main() -> None:
     dataset = json.loads(DATASET.read_text(encoding="utf-8"))
     results = {case["id"]: run_case(case) for case in dataset["cases"]}
+    fields = list(EvaluationResult.__annotations__)
     aggregate = EvaluationResult(
-        *(sum(getattr(result, field) for result in results.values()) / len(results) for field in EvaluationResult.__annotations__)
+        *(sum(getattr(result, field) for result in results.values()) / len(results) for field in fields)
     )
     print("RAG evaluation")
     print(f"retrieval_relevance={aggregate.retrieval_relevance:.2f}")
