@@ -1,15 +1,22 @@
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
 from app.chunking import chunk_text
 from app.config import settings
+from app.database import get_db
 from app.embeddings import embedding_model
+from app.repositories import DocumentRepository, StoredChunk
 from app.schemas import DocumentResponse, SearchRequest, SearchResponse, SearchResult, TokenRequest, TokenResponse
 from app.security import create_access_token, get_current_user
-from app.store import StoredChunk, vector_store
+from app.store import get_repository
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+app = FastAPI(title=settings.app_name, version="0.2.0")
+
+
+def repository(db: Session = Depends(get_db)) -> DocumentRepository:
+    return get_repository(db)
 
 
 @app.get("/health")
@@ -18,8 +25,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/ready")
-def ready() -> dict[str, str | int]:
-    return {"status": "ready", "indexed_chunks": vector_store.count()}
+def ready(repo: DocumentRepository = Depends(repository)) -> dict[str, str | int]:
+    return {"status": "ready", "indexed_chunks": repo.count()}
 
 
 @app.post("/api/v1/auth/token", response_model=TokenResponse)
@@ -32,6 +39,7 @@ def issue_token(request: TokenRequest) -> TokenResponse:
 async def ingest_document(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
+    repo: DocumentRepository = Depends(repository),
 ) -> DocumentResponse:
     if user.get("role") not in {"admin", "user"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
@@ -44,22 +52,27 @@ async def ingest_document(
     text = raw.decode("utf-8", errors="strict")
     chunks = chunk_text(text, settings.chunk_size, settings.chunk_overlap)
     document_id = str(uuid4())
-    for chunk in chunks:
-        vector_store.add(
-            StoredChunk(
-                document_id=document_id,
-                filename=file.filename or "unknown",
-                chunk_index=chunk.index,
-                text=chunk.text,
-                vector=embedding_model.embed(chunk.text),
-            )
+    stored_chunks = [
+        StoredChunk(
+            document_id=document_id,
+            filename=file.filename or "unknown",
+            chunk_index=chunk.index,
+            text=chunk.text,
+            vector=embedding_model.embed(chunk.text),
         )
+        for chunk in chunks
+    ]
+    repo.add_document(document_id, file.filename or "unknown", stored_chunks)
     return DocumentResponse(document_id=document_id, filename=file.filename or "unknown", chunks_created=len(chunks))
 
 
 @app.post("/api/v1/search", response_model=SearchResponse)
-def search(request: SearchRequest, _: dict = Depends(get_current_user)) -> SearchResponse:
-    matches = vector_store.search(request.question, request.top_k)
+def search(
+    request: SearchRequest,
+    _: dict = Depends(get_current_user),
+    repo: DocumentRepository = Depends(repository),
+) -> SearchResponse:
+    matches = repo.search(request.question, request.top_k)
     return SearchResponse(
         results=[
             SearchResult(
