@@ -7,6 +7,7 @@ Create Date: 2026-09-09
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 
 revision = "0001_initial_pgvector"
@@ -24,7 +25,7 @@ def upgrade() -> None:
         "documents",
         sa.Column("id", sa.String(length=36), primary_key=True),
         sa.Column("filename", sa.String(length=255), nullable=False),
-        sa.Column("metadata_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
+        sa.Column("metadata_json", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
 
