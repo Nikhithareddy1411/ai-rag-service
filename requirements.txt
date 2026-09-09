@@ -9,5 +9,7 @@ psycopg[binary]==3.2.9
 pgvector==0.4.1
 alembic==1.16.4
 sentence-transformers==5.1.0
+transformers==4.57.1
+torch==2.8.0
 pytest==8.4.1
 httpx==0.28.1
